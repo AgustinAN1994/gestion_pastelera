@@ -2562,7 +2562,7 @@ function toggleAuth() {
 async function saveToFirestore() {
   if (!db || !user) return;
   try {
-    await db.collection('dqtg_users').doc(user.uid).set({
+    await db.collection('dqtg_data').doc('principal').set({
       insumos, productos, movimientos, categorias, presupuestos,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
@@ -2572,7 +2572,7 @@ async function saveToFirestore() {
 async function loadFromFirestore() {
   if (!db || !user) return;
   try {
-    const doc = await db.collection('dqtg_users').doc(user.uid).get();
+    const doc = await db.collection('dqtg_data').doc('principal').get();
     if (doc.exists) {
       const data = doc.data();
       if (data.insumos) insumos = data.insumos;
@@ -2646,4 +2646,4 @@ restaurarRespaldo = function(file) {
 initFirebase();
 </script>
 </body>
-</html>
+</ht
