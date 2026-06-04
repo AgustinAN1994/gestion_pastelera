@@ -48,6 +48,8 @@
 .dark .modal-content { background: var(--card-bg) !important; }
 .dark input, .dark select, .dark textarea { background: #1A110B; color: var(--text); border-color: var(--cream-dark); }
 .dark .search-bar input, .dark .search-bar select { background: #1A110B; }
+.dark .ing-dropdown { background: var(--card-bg); }
+.dark .ing-dropdown div:hover { background: var(--cream-dark); }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -331,9 +333,14 @@ tbody tr:hover { background: #FFFCF8; }
   align-items: center;
   flex-wrap: wrap;
 }
-.ing-add select { flex: 1; min-width: 140px; }
+.ing-add .ing-select-wrap { position: relative; flex: 1; min-width: 140px; }
+.ing-add .ing-select-wrap input { width: 100%; padding: 6px 10px; font-size: 12px; border: 2px solid var(--cream-dark); border-radius: 6px; box-sizing: border-box; }
 .ing-add input[type=number] { width: 90px; }
 .ing-add .btn-sm { flex-shrink: 0; }
+.ing-dropdown { display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--white); border: 2px solid var(--cream-dark); border-top: none; border-radius: 0 0 8px 8px; max-height: 200px; overflow-y: auto; z-index: 50; }
+.ing-dropdown div { padding: 6px 10px; cursor: pointer; font-size: 12px; border-bottom: 1px solid var(--cream-dark); display: flex; justify-content: space-between; transition: background 0.15s; }
+.ing-dropdown div:last-child { border-bottom: none; }
+.ing-dropdown div:hover { background: var(--cream); }
 
 .quick-add {
   font-size: 12px;
@@ -959,10 +966,10 @@ tbody tr:hover { background: #FFFCF8; }
           <label>Ingredientes</label>
           <div id="ing-container" class="ing-list"></div>
           <div class="ing-add">
-            <input type="text" id="ing-search" placeholder="Buscar insumo..." oninput="cargarSelectInsumos()" style="padding:6px 10px;font-size:12px;border:2px solid var(--cream-dark);border-radius:6px;width:100%;margin-bottom:4px">
-            <select id="ing-mat-select">
-              <option value="">— Seleccionar insumo —</option>
-            </select>
+            <div class="ing-select-wrap">
+              <input type="text" id="ing-mat-input" placeholder="Buscar y seleccionar..." oninput="filtrarInsumosMat()" onfocus="filtrarInsumosMat()" onblur="setTimeout(()=>$('ing-mat-dropdown').style.display='none',150)" autocomplete="off">
+              <div id="ing-mat-dropdown" class="ing-dropdown"></div>
+            </div>
             <input type="number" id="ing-cant" placeholder="Cant." step="0.01" min="0">
             <button class="btn btn-sm btn-success" onclick="addIng()">+</button>
           </div>
@@ -1582,12 +1589,33 @@ function deleteProdDesdeModal() {
   deleteProducto(currentProdId); // has its own confirm
 }
 
+let ingMatSeleccionado = null;
+
+function filtrarInsumosMat() {
+  const q = ($('ing-mat-input').value || '').trim().toLowerCase();
+  const dd = $('ing-mat-dropdown');
+  const sorted = [...insumos].sort((a,b) => a.nombre.localeCompare(b.nombre));
+  const match = q ? sorted.filter(m => m.nombre.toLowerCase().includes(q)) : sorted;
+  if (match.length === 0) { dd.style.display = 'none'; dd.innerHTML = ''; return; }
+  dd.style.display = 'block';
+  dd.innerHTML = match.slice(0, 20).map(m => `<div onclick="seleccionarInsumoMat('${m.id}')">
+    <span>${esc(m.nombre)}</span><span style="color:var(--text-light)">${dinero(m.precioUnitario)}/${m.unidad || 'g'}</span>
+  </div>`).join('');
+}
+
+function seleccionarInsumoMat(id) {
+  const m = insumos.find(x => x.id === id);
+  if (!m) return;
+  ingMatSeleccionado = id;
+  $('ing-mat-input').value = m.nombre + ' — ' + dinero(m.precioUnitario) + '/' + (m.unidad || 'g');
+  $('ing-mat-dropdown').style.display = 'none';
+}
+
 function cargarSelectInsumos() {
-  const sel = $('ing-mat-select');
-  const q = ($('ing-search').value || '').trim().toLowerCase();
-  const list = q ? insumos.filter(m => m.nombre.toLowerCase().includes(q)) : insumos;
-  sel.innerHTML = '<option value="">— Seleccionar insumo —</option>' +
-    list.map(m => `<option value="${m.id}">${esc(m.nombre)} (${dinero(m.precioUnitario)}/${m.unidad || 'g'})</option>`).join('');
+  // Kept for compatibility - resets the input
+  ingMatSeleccionado = null;
+  if ($('ing-mat-input')) $('ing-mat-input').value = '';
+  if ($('ing-mat-dropdown')) $('ing-mat-dropdown').style.display = 'none';
 }
 
 function renderIngs(ings) {
@@ -1621,7 +1649,7 @@ function getIngs() {
 }
 
 function addIng() {
-  const matId = $('ing-mat-select').value;
+  const matId = ingMatSeleccionado;
   const cant = parseFloat($('ing-cant').value);
   if (!matId || !cant || cant <= 0) { toast('Seleccioná un insumo y cantidad válida', 'error'); return; }
   const ings = getIngs();
@@ -1630,6 +1658,9 @@ function addIng() {
   else { ings.push({ insumoId: matId, cantidad: cant }); }
   renderIngs(ings);
   $('ing-cant').value = '';
+  ingMatSeleccionado = null;
+  $('ing-mat-input').value = '';
+  $('ing-mat-dropdown').style.display = 'none';
   marcarProdDirty();
 }
 
@@ -1686,7 +1717,7 @@ function saveQuickInsumo() {
   insumos.push({ id: uid(), nombre, unidad, presentacion, precio, precioUnitario: pUnit });
   save(); renderInsumos();
   cargarSelectInsumos();
-  $('ing-mat-select').value = insumos[insumos.length - 1].id;
+  seleccionarInsumoMat(insumos[insumos.length - 1].id);
   closeModal('modal-quick-insumo');
   toast(`Insumo "${nombre}" creado y seleccionado`);
 }
