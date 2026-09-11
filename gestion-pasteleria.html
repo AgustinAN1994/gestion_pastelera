@@ -622,6 +622,7 @@ tbody tr:hover { background: #FFFCF8; }
   </div>
   <button class="btn-toggle-dark" onclick="toggleDark()" title="Modo oscuro" id="dark-toggle">🌙</button>
   <button class="btn-toggle-dark" onclick="toggleAuth()" title="Sincronización en la nube" id="sync-status" style="font-size:14px;display:none;gap:4px;align-items:center">☁️</button>
+  <span style="font-size:11px;color:var(--text-light);opacity:.7;white-space:nowrap" title="Versión de la app">v2.2</span>
   <button class="btn-toggle-dark" onclick="abrirConfig()" title="Configuración" style="font-size:16px">⚙️</button>
 </nav>
 
@@ -2668,7 +2669,9 @@ function actualizarEstadoSync() {
   if (!firebaseReady) { el.style.display = 'none'; return; }
   el.style.display = 'inline-flex';
   if (user) {
-    el.innerHTML = '☁️ Sincronizado';
+    const ok = meta && meta.lastCloudWrite > 0;
+    const t = ok ? new Date(meta.lastCloudWrite) : null;
+    el.innerHTML = t ? ('☁️ ✓ ' + t.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })) : '☁️ Sincronizado';
     el.style.opacity = '1';
   } else {
     el.innerHTML = '☁️ Iniciar sesión';
@@ -2706,6 +2709,7 @@ async function saveToFirestore() {
     });
     meta.lastCloudWrite = Date.now();
     saveMeta();
+    actualizarEstadoSync();
     return true;
   } catch (e) {
     console.warn('Error al sincronizar:', e);
