@@ -1487,7 +1487,7 @@ function getRinde(p) {
 }
 
 function getMargenUnit(p) {
-  if (p && p.margenUnitAuto !== false && p.margenUnit === undefined) {
+  if (p && p.margenUnitAuto !== false && (p.margenUnit === undefined || p.margenUnit === null)) {
     const mm = parseFloat(p && p.margen);
     return (mm && mm >= 0) ? mm : 60;
   }
@@ -1810,7 +1810,7 @@ function saveProducto() {
   const categoria = $('prod-categoria').value;
   const margen = parseFloat($('prod-margen').value) || 0;
   const margenUnitAuto = $('prod-margen-unit-auto').checked;
-  const margenUnit = margenUnitAuto ? undefined : (parseFloat($('prod-margen-unit').value) || 0);
+  const margenUnit = margenUnitAuto ? null : (parseFloat($('prod-margen-unit').value) || 0);
   const r = parseFloat($('prod-rinde').value);
   const rinde = (r && r > 0) ? r : 1;
   const ings = getIngs();
@@ -2069,7 +2069,7 @@ function procesarImportProductos(file) {
       const r = parseFloat(cols[idxRinde]);
       const rinde = (idxRinde >= 0 && r && r > 0) ? r : 1;
       const mu = parseFloat(cols[idxMargU]);
-      const margenUnit = (idxMargU >= 0 && mu && mu >= 0) ? mu : undefined;
+      const margenUnit = (idxMargU >= 0 && mu && mu >= 0) ? mu : null;
       const margenUnitAuto = idxMargUAuto < 0 || (cols[idxMargUAuto] || '').trim().toUpperCase() !== 'NO';
 
       // Parse ingredients: "HARINA:500; AZUCAR:200"
@@ -2698,8 +2698,10 @@ function toggleAuth() {
 async function saveToFirestore() {
   if (!db || !user) return false;
   try {
+    // Sanitize: remove undefined values (Firestore rejects them)
+    const payload = JSON.parse(JSON.stringify({ insumos, productos, movimientos, categorias, presupuestos }));
     await db.collection('dqtg_data').doc('principal').set({
-      insumos, productos, movimientos, categorias, presupuestos,
+      ...payload,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     meta.lastCloudWrite = Date.now();
