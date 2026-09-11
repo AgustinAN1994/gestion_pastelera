@@ -437,6 +437,7 @@ tbody tr:hover { background: #FFFCF8; }
 }
 .prod-card .pcost { font-size: 12px; color: var(--text-light); }
 .prod-card .pprice { font-size: 18px; font-weight: 700; color: var(--caramel-dark); }
+.prod-card .punit { font-size: 11px; color: var(--text-light); margin-top: 6px; text-align: right; }
 
 /* LIST VIEW */
 .prod-list { display:none !important; }
@@ -445,7 +446,7 @@ tbody tr:hover { background: #FFFCF8; }
 .prod-grid.active { display:grid !important; }
 .prod-list .list-row {
   display: grid;
-  grid-template-columns: 1fr 100px 120px 120px 60px;
+  grid-template-columns: 1fr 100px 120px 120px 55px 60px;
   gap: 8px;
   align-items: center;
   padding: 8px 12px;
@@ -944,6 +945,12 @@ tbody tr:hover { background: #FFFCF8; }
           <div><div class="lbl">Ganancia</div><div class="val" id="prod-view-ganancia">$0,00</div></div>
         </div>
 
+        <div class="cost-summary" style="margin-top:10px;background:var(--white)">
+          <div><div class="lbl">Rinde</div><div class="val" id="prod-view-rinde">1</div></div>
+          <div><div class="lbl">Costo por unidad</div><div class="val" id="prod-view-costo-unit">$0,00</div></div>
+          <div><div class="lbl">Precio por unidad</div><div class="val sale" id="prod-view-precio-unit">$0,00</div></div>
+        </div>
+
         <div id="prod-view-desactualizado" style="display:none;margin-top:12px;padding:10px 14px;background:var(--red-light);border-radius:8px;font-size:13px;color:#B71C1C">
           ⚠ Algunos precios de insumos cambiaron desde que se guardó este producto.
           <button class="btn btn-sm btn-danger" onclick="actualizarProdPrecios()" style="margin-left:10px">Actualizar</button>
@@ -989,10 +996,28 @@ tbody tr:hover { background: #FFFCF8; }
             </div>
           </div>
         </div>
+        <div class="form-row" style="margin-bottom:10px">
+          <div class="form-group">
+            <label>Rinde (cuántas porciones/unidades salen)</label>
+            <input type="number" id="prod-rinde" value="1" step="0.01" min="0" oninput="calcCostos();marcarProdDirty()">
+          </div>
+          <div class="form-group">
+            <label>Margen por unidad (%)</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:2px 0 6px;color:var(--text-light);cursor:pointer">
+              <input type="checkbox" id="prod-margen-unit-auto" checked onchange="toggleMargenUnitAuto()"> Usar margen general (calculado)
+            </label>
+            <input type="number" id="prod-margen-unit" value="60" step="1" min="0" max="500" disabled oninput="calcCostos();marcarProdDirty()">
+          </div>
+        </div>
         <div class="cost-summary">
           <div><div class="lbl">Costo total</div><div class="val" id="prod-costo">$0,00</div></div>
           <div><div class="lbl">Precio de venta</div><div class="val sale" id="prod-precio">$0,00</div></div>
           <div><div class="lbl">Ganancia</div><div class="val" id="prod-ganancia">$0,00</div></div>
+        </div>
+        <div class="cost-summary" style="margin-top:10px;background:var(--white)">
+          <div><div class="lbl">Costo por unidad</div><div class="val" id="prod-costo-unit">$0,00</div></div>
+          <div><div class="lbl">Precio por unidad</div><div class="val sale" id="prod-precio-unit">$0,00</div></div>
+          <div><div class="lbl">Ganancia por unidad</div><div class="val" id="prod-ganancia-unit">$0,00</div></div>
         </div>
       </div>
 
@@ -1407,16 +1432,18 @@ function renderProductos() {
   empty.style.display = 'none';
 
   // Grid
-  grid.innerHTML = withVals.map(({ p, costo, precio }) =>
-    `<div class="prod-card" onclick="openProdModal('${p.id}')">
+  grid.innerHTML = withVals.map(({ p, costo, precio }) => {
+    const rinde = getRinde(p);
+    return `<div class="prod-card" onclick="openProdModal('${p.id}')">
       <div class="pname">${esc(p.nombre)}</div>
       <div class="pcat"><span class="badge ${badgeCls(p.categoria)}">${esc(p.categoria)}</span></div>
       <div class="pfooter">
         <div class="pcost">Costo: ${dinero(costo)}</div>
         <div class="pprice">${dinero(precio)}</div>
       </div>
-    </div>`
-  ).join('');
+      <div class="punit">Rinde: ${rinde} · ${dinero(costo / rinde)}/unid · ${dinero(precioUnitario(p))}/unid</div>
+    </div>`;
+  }).join('');
 
   // List
   lview.innerHTML = `<div class="list-row header">
@@ -1424,14 +1451,17 @@ function renderProductos() {
     <span style="text-align:center">Categoría</span>
     <span class="lcost">Costo</span>
     <span class="lprice">Precio</span>
+    <span style="text-align:center">Rinde</span>
     <span style="text-align:center">Margen</span>
   </div>` + withVals.map(({ p, costo, precio }) => {
     const mg = p.margen !== undefined ? p.margen : 60;
+    const rinde = getRinde(p);
     return `<div class="list-row" onclick="openProdModal('${p.id}')">
       <span class="lname">${esc(p.nombre)}</span>
       <span style="text-align:center"><span class="badge ${badgeCls(p.categoria)}">${esc(p.categoria)}</span></span>
-      <span class="lcost">${dinero(costo)}</span>
-      <span class="lprice">${dinero(precio)}</span>
+      <span class="lcost">${dinero(costo)}<br><small style="color:var(--text-light)">${dinero(costo / rinde)}/unid</small></span>
+      <span class="lprice">${dinero(precio)}<br><small style="color:var(--caramel-dark)">${dinero(precioUnitario(p))}/unid</small></span>
+      <span style="text-align:center;color:var(--text-light);font-size:12px">${rinde}</span>
       <span style="text-align:center;color:var(--text-light);font-size:12px">${mg}%</span>
     </div>`;
   }).join('');
@@ -1442,6 +1472,35 @@ function setProdView(v) {
   document.querySelectorAll('#view-toggle button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
   $('prod-grid').classList.toggle('active', v === 'grid');
   $('prod-list').classList.toggle('active', v === 'list');
+}
+
+function toggleMargenUnitAuto() {
+  const auto = $('prod-margen-unit-auto').checked;
+  $('prod-margen-unit').disabled = auto;
+  calcCostos();
+  marcarProdDirty();
+}
+
+function getRinde(p) {
+  const r = parseFloat(p && p.rinde);
+  return (r && r > 0) ? r : 1;
+}
+
+function getMargenUnit(p) {
+  if (p && p.margenUnitAuto !== false && p.margenUnit === undefined) {
+    const mm = parseFloat(p && p.margen);
+    return (mm && mm >= 0) ? mm : 60;
+  }
+  const m = parseFloat(p && p.margenUnit);
+  return (m && m >= 0) ? m : ((p && p.margen !== undefined) ? p.margen : 60);
+}
+
+function precioUnitario(p) {
+  const costoU = calcCosto(p) / getRinde(p);
+  const mgU = getMargenUnit(p);
+  const t = (p && p.margenTipo) || 'markup';
+  if (t === 'markup') return costoU * (1 + mgU / 100);
+  return mgU >= 100 ? costoU * 10 : costoU / (1 - mgU / 100);
 }
 
 function calcCosto(p) {
@@ -1493,6 +1552,10 @@ function openProdModal(id, editMode) {
     $('prod-name').value = '';
     $('prod-categoria').value = categorias[0] || '';
     $('prod-margen').value = 60;
+    $('prod-rinde').value = 1;
+    $('prod-margen-unit-auto').checked = true;
+    $('prod-margen-unit').value = 60;
+    $('prod-margen-unit').disabled = true;
     margenTipo = 'markup';
     setMargenTipo('markup');
     renderIngs([]);
@@ -1524,9 +1587,13 @@ function openProdModal(id, editMode) {
     const costo = calcCosto(p);
     const precio = calcPrecio(p);
     const ganancia = precio - costo;
+    const rinde = getRinde(p);
     $('prod-view-costo').textContent = dinero(costo);
     $('prod-view-precio').textContent = dinero(precio);
     $('prod-view-ganancia').textContent = dinero(ganancia);
+    $('prod-view-rinde').textContent = rinde;
+    $('prod-view-costo-unit').textContent = dinero(costo / rinde);
+    $('prod-view-precio-unit').textContent = dinero(precioUnitario(p));
 
     // Check if outdated
     const outdated = p.ingredientes.some(ing => {
@@ -1569,6 +1636,11 @@ function openProdModal(id, editMode) {
     $('prod-name').value = p.nombre;
     $('prod-categoria').value = p.categoria;
     $('prod-margen').value = p.margen !== undefined ? p.margen : 60;
+    $('prod-rinde').value = getRinde(p);
+    const autoU = p.margenUnitAuto !== false;
+    $('prod-margen-unit-auto').checked = autoU;
+    $('prod-margen-unit').value = p.margenUnit !== undefined ? p.margenUnit : getMargenUnit(p);
+    $('prod-margen-unit').disabled = autoU;
     margenTipo = p.margenTipo || 'markup';
     setMargenTipo(margenTipo);
     renderIngs(p.ingredientes);
@@ -1681,6 +1753,10 @@ function setMargenTipo(t) {
 function calcCostos() {
   const ings = getIngs();
   const mg = parseFloat($('prod-margen').value) || 0;
+  const autoU = $('prod-margen-unit-auto').checked;
+  const mgU = autoU ? mg : (parseFloat($('prod-margen-unit').value) || 0);
+  const r = parseFloat($('prod-rinde').value);
+  const rinde = (r && r > 0) ? r : 1;
   const costo = ings.reduce((s, ing) => {
     const m = insumos.find(x => x.id === ing.insumoId);
     return s + (m ? ing.cantidad * m.precioUnitario : 0);
@@ -1688,9 +1764,16 @@ function calcCostos() {
   let precio;
   if (margenTipo === 'markup') { precio = costo * (1 + mg / 100); }
   else { precio = mg >= 100 ? costo * 10 : costo / (1 - mg / 100); }
+  const costU = costo / rinde;
+  let precioU;
+  if (margenTipo === 'markup') { precioU = costU * (1 + mgU / 100); }
+  else { precioU = mgU >= 100 ? costU * 10 : costU / (1 - mgU / 100); }
   $('prod-costo').textContent = dinero(costo);
   $('prod-precio').textContent = dinero(precio);
   $('prod-ganancia').textContent = dinero(precio - costo);
+  $('prod-costo-unit').textContent = dinero(costU);
+  $('prod-precio-unit').textContent = dinero(precioU);
+  $('prod-ganancia-unit').textContent = dinero(precioU - costU);
 }
 
 function quickAddInsumo() {
@@ -1726,6 +1809,10 @@ function saveProducto() {
   const nombre = $('prod-name').value.trim();
   const categoria = $('prod-categoria').value;
   const margen = parseFloat($('prod-margen').value) || 0;
+  const margenUnitAuto = $('prod-margen-unit-auto').checked;
+  const margenUnit = margenUnitAuto ? undefined : (parseFloat($('prod-margen-unit').value) || 0);
+  const r = parseFloat($('prod-rinde').value);
+  const rinde = (r && r > 0) ? r : 1;
   const ings = getIngs();
   if (!nombre) { toast('Ingresá un nombre para el producto', 'error'); return; }
   if (ings.length === 0) { toast('Agregá al menos un ingrediente', 'error'); return; }
@@ -1736,10 +1823,10 @@ function saveProducto() {
   });
   if (currentProdId) {
     const p = productos.find(x => x.id === currentProdId);
-    if (p) Object.assign(p, { nombre, categoria, margen, margenTipo, ingredientes: ings });
+    if (p) Object.assign(p, { nombre, categoria, margen, margenTipo, rinde, margenUnit, margenUnitAuto, ingredientes: ings });
     toast('Producto actualizado');
   } else {
-    productos.push({ id: uid(), nombre, categoria, margen, margenTipo, ingredientes: ings });
+    productos.push({ id: uid(), nombre, categoria, margen, margenTipo, rinde, margenUnit, margenUnitAuto, ingredientes: ings });
     toast('Producto creado');
   }
   save(); renderProductos(); closeProdModal();
@@ -1925,8 +2012,8 @@ function exportCSV(type) {
     ).join('\n');
     fn = 'insumos.csv';
   } else if (type === 'productos') {
-    csv = 'Nombre,Categoria,Margen(%),TipoMargen,Ingredientes\n' + productos.map(p =>
-      `"${escCSV(p.nombre)}","${escCSV(p.categoria)}",${p.margen !== undefined ? p.margen : 60},"${p.margenTipo || 'markup'}","${escCSV(p.ingredientes.map(i => {
+    csv = 'Nombre,Categoria,Margen(%),TipoMargen,Rinde,MargenUnidad(%),MargenUnidadAuto,Ingredientes\n' + productos.map(p =>
+      `"${escCSV(p.nombre)}","${escCSV(p.categoria)}",${p.margen !== undefined ? p.margen : 60},"${p.margenTipo || 'markup'}",${getRinde(p)},${getMargenUnit(p)},${p.margenUnitAuto !== false ? 'SI' : 'NO'},"${escCSV(p.ingredientes.map(i => {
         const m = insumos.find(x => x.id === i.insumoId);
         return (m ? m.nombre : '?') + ':' + i.cantidad;
       }).join('; '))}"`
@@ -1964,6 +2051,9 @@ function procesarImportProductos(file) {
     const idxCat = header.findIndex(h => h.includes('categoria'));
     const idxMarg = header.findIndex(h => h.includes('margen'));
     const idxTipo = header.findIndex(h => h.includes('tipomargen'));
+    const idxRinde = header.findIndex(h => h.includes('rinde'));
+    const idxMargU = header.findIndex(h => h.includes('margenunidad') || h.includes('margenun'));
+    const idxMargUAuto = header.findIndex(h => h.includes('margenunidadauto'));
     const idxIng = header.findIndex(h => h.includes('ingredientes'));
     if (idxNom < 0 || idxIng < 0) { toast('El CSV debe tener columnas: Nombre e Ingredientes', 'error'); return; }
 
@@ -1976,6 +2066,11 @@ function procesarImportProductos(file) {
       const categoria = idxCat >= 0 && cols[idxCat] ? cols[idxCat].replace(/^"|"$/g, '').trim() : (categorias[0] || 'Otro');
       const margen = idxMarg >= 0 ? parseFloat(cols[idxMarg]) : 60;
       const margenTipo = idxTipo >= 0 && cols[idxTipo] ? cols[idxTipo].replace(/^"|"$/g, '').trim() : 'markup';
+      const r = parseFloat(cols[idxRinde]);
+      const rinde = (idxRinde >= 0 && r && r > 0) ? r : 1;
+      const mu = parseFloat(cols[idxMargU]);
+      const margenUnit = (idxMargU >= 0 && mu && mu >= 0) ? mu : undefined;
+      const margenUnitAuto = idxMargUAuto < 0 || (cols[idxMargUAuto] || '').trim().toUpperCase() !== 'NO';
 
       // Parse ingredients: "HARINA:500; AZUCAR:200"
       const ingStr = cols[idxIng] ? cols[idxIng].replace(/^"|"$/g, '') : '';
@@ -1995,11 +2090,11 @@ function procesarImportProductos(file) {
 
       const existing = productos.find(p => p.nombre.toLowerCase() === nombre.toLowerCase());
       if (existing) {
-        Object.assign(existing, { nombre, categoria, margen, margenTipo, ingredientes });
+        Object.assign(existing, { nombre, categoria, margen, margenTipo, rinde, margenUnit, margenUnitAuto, ingredientes });
       } else {
         // Ensure category exists
         if (!categorias.includes(categoria)) categorias.push(categoria);
-        productos.push({ id: uid(), nombre, categoria, margen, margenTipo, ingredientes });
+        productos.push({ id: uid(), nombre, categoria, margen, margenTipo, rinde, margenUnit, margenUnitAuto, ingredientes });
       }
       count++;
     }
@@ -2451,12 +2546,12 @@ function duplicarProducto(id) {
 function imprimirReceta(id) {
   const p = productos.find(x => x.id === id);
   if (!p) return;
-  const costo = calcCosto(p), precio = calcPrecio(p);
+  const costo = calcCosto(p), precio = calcPrecio(p), rinde = getRinde(p);
   const w = window.open('', '_blank');
   w.document.write(`<html><head><meta charset="utf-8"><title>${esc(p.nombre)}</title>
-  <style>body{font-family:Arial,sans-serif;max-width:600px;margin:40px auto;padding:0 20px;color:#333}h1{font-size:22px;color:#5D4037}table{width:100%;border-collapse:collapse;margin:16px 0}th{background:#EFEBE9;padding:8px 10px;text-align:left;font-size:13px}td{padding:8px 10px;border-bottom:1px solid #EFEBE9;font-size:14px}.right{text-align:right}.total{font-weight:700;font-size:16px;color:#5D4037;margin-top:12px}</style></head><body>
+  <style>body{font-family:Arial,sans-serif;max-width:600px;margin:40px auto;padding:0 20px;color:#333}h1{font-size:22px;color:#5D4037}table{width:100%;border-collapse:collapse;margin:16px 0}th{background:#EFEBE9;padding:8px 10px;text-align:left;font-size:13px}td{padding:8px 10px;border-bottom:1px solid #EFEBE9;font-size:14px}.right{text-align:right}.total{font-weight:700;font-size:16px;color:#5D4037;margin-top:12px}.unit{color:#888;font-size:13px;margin-top:4px}</style></head><body>
   <h1>${esc(p.nombre)}</h1>
-  <p style="color:#888;font-size:13px">Categoría: ${esc(p.categoria)} · Margen: ${p.margen || 60}%</p>
+  <p style="color:#888;font-size:13px">Categoría: ${esc(p.categoria)} · Margen: ${p.margen || 60}% · Rinde: ${rinde}</p>
   <table><tr><th>Ingrediente</th><th class="right">Cant.</th><th class="right">P.Unit</th><th class="right">Subtotal</th></tr>
   ${p.ingredientes.map(ing => {
     const m = insumos.find(x => x.id === ing.insumoId);
@@ -2466,7 +2561,8 @@ function imprimirReceta(id) {
     return `<tr><td>${esc(nm)}</td><td class="right">${ing.cantidad} ${uni}</td><td class="right">$${pu.toFixed(2)}</td><td class="right">$${(ing.cantidad * pu).toFixed(2)}</td></tr>`;
   }).join('')}
   </table>
-  <p class="total">Costo: $${costo.toFixed(2)} · Precio: $${precio.toFixed(2)}</p>
+  <p class="total">Costo total: $${costo.toFixed(2)} · Precio total: $${precio.toFixed(2)}</p>
+  <p class="unit">Rinde: ${rinde} · Costo por unidad: $${(costo / rinde).toFixed(2)} · Precio por unidad: $${precioUnitario(p).toFixed(2)}</p>
   </body></html>`);
   w.document.close();
   w.print();
