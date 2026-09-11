@@ -2707,7 +2707,7 @@ async function saveToFirestore() {
     return true;
   } catch (e) {
     console.warn('Error al sincronizar:', e);
-    toast('⚠ No se pudo sincronizar con la nube', 'error');
+    toast('⚠ No se pudo sincronizar: ' + e.message, 'error');
     return false;
   }
 }
