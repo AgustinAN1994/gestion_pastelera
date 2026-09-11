@@ -2639,6 +2639,15 @@ let db = null;
 let user = null;
 let firebaseReady = false;
 
+let meta = { lastLocalWrite: 0, lastCloudWrite: 0 };
+try {
+  meta = Object.assign({ lastLocalWrite: 0, lastCloudWrite: 0 }, JSON.parse(localStorage.getItem('dqtg_meta') || '{}'));
+} catch (e) { /* keep defaults */ }
+
+function saveMeta() {
+  try { localStorage.setItem('dqtg_meta', JSON.stringify(meta)); } catch (e) {}
+}
+
 function initFirebase() {
   if (firebaseConfig.apiKey === "TU_API_KEY") return;
   try {
@@ -2687,13 +2696,20 @@ function toggleAuth() {
 }
 
 async function saveToFirestore() {
-  if (!db || !user) return;
+  if (!db || !user) return false;
   try {
     await db.collection('dqtg_data').doc('principal').set({
       insumos, productos, movimientos, categorias, presupuestos,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-  } catch (e) { console.warn('Error al sincronizar:', e); }
+    meta.lastCloudWrite = Date.now();
+    saveMeta();
+    return true;
+  } catch (e) {
+    console.warn('Error al sincronizar:', e);
+    toast('⚠ No se pudo sincronizar con la nube', 'error');
+    return false;
+  }
 }
 
 async function loadFromFirestore() {
@@ -2702,20 +2718,32 @@ async function loadFromFirestore() {
     const doc = await db.collection('dqtg_data').doc('principal').get();
     if (doc.exists) {
       const data = doc.data();
-      if (data.insumos) insumos = data.insumos;
-      if (data.productos) productos = data.productos;
-      if (data.movimientos) movimientos = data.movimientos;
-      if (data.categorias) categorias = data.categorias;
-      if (data.presupuestos) presupuestos = data.presupuestos;
-      // Save to localStorage as cache
-      saveLocal();
-      // Re-render
-      actualizarDatalistContrapartes();
-      renderInsumos();
-      renderProductos();
-      renderPresupuestos();
-      renderCaja();
-      toast('✅ Datos sincronizados desde la nube');
+      let cloudMs = 0;
+      if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
+        try { cloudMs = data.updatedAt.toDate().getTime(); } catch (e) { cloudMs = 0; }
+      }
+      if (cloudMs > meta.lastLocalWrite) {
+        // Cloud is newer: adopt it
+        if (data.insumos) insumos = data.insumos;
+        if (data.productos) productos = data.productos;
+        if (data.movimientos) movimientos = data.movimientos;
+        if (data.categorias) categorias = data.categorias;
+        if (data.presupuestos) presupuestos = data.presupuestos;
+        meta.lastCloudWrite = cloudMs; saveMeta();
+        // Save to localStorage as cache
+        saveLocal();
+        // Re-render
+        actualizarDatalistContrapartes();
+        renderInsumos();
+        renderProductos();
+        renderPresupuestos();
+        renderCaja();
+        toast('✅ Datos sincronizados desde la nube');
+      } else {
+        // Local is newer (or unknown): keep local and push it up so all devices converge
+        await saveToFirestore();
+        toast('💾 Datos locales más recientes: sincronizados a la nube');
+      }
     } else {
       // First time - upload local data
       await saveToFirestore();
@@ -2729,6 +2757,8 @@ function saveLocal() {
   localStorage.setItem('dqtg_movimientos', JSON.stringify(movimientos));
   localStorage.setItem('dqtg_categorias', JSON.stringify(categorias));
   localStorage.setItem('dqtg_presupuestos', JSON.stringify(presupuestos));
+  meta.lastLocalWrite = Date.now();
+  saveMeta();
 }
 
 save = function() {
